@@ -1,5 +1,6 @@
 import UserInfo from "../models/userinfo.model.js";
 import UserAcneLevel from "../models/useracnelevel.model.js";
+import User from "../models/user.model.js";
 
 /**
  * Save user questionnaire responses
@@ -84,6 +85,47 @@ export const getUserStatus = async (req, res) => {
     console.error("Get user status error:", err);
     return res.status(500).json({ 
       message: "Failed to fetch user status",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined
+    });
+  }
+};
+
+/**
+ * Get authenticated user's full info using JWT token
+ * REQUIREMENTS:
+ * - User must be authenticated
+ * RETURNS:
+ * - account details (safe fields only)
+ * - questionnaire data (if submitted)
+ */
+export const getMyUserInfo = async (req, res) => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: Invalid user context" });
+    }
+
+    const [account, questionnaire, acneAnalysis] = await Promise.all([
+      User.findOne({ userId }).select("userId username email isVerified createdAt updatedAt"),
+      UserInfo.findOne({ userId }).select("-__v"),
+      UserAcneLevel.findOne({ userId }).select("-__v")
+    ]);
+
+    if (!account) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    return res.status(200).json({
+      message: "User info fetched successfully",
+      user: account,
+      questionnaire: questionnaire || null,
+      acne_analysis: acneAnalysis || null
+    });
+  } catch (err) {
+    console.error("Get my user info error:", err);
+    return res.status(500).json({
+      message: "Failed to fetch user info",
       error: process.env.NODE_ENV === "development" ? err.message : undefined
     });
   }

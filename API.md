@@ -396,7 +396,78 @@ ALLOWED_ORIGINS=http://localhost:5173
 
 ---
 
-### 2. Get User Status
+### 2. Get Authenticated User Info (Dashboard Payload)
+**Endpoint:** `GET /auth/userinfo`
+
+**Authentication:** Required (JWT Token)
+
+**Description:** Fetch authenticated user's account details, questionnaire data, and acne analysis data in a single request for dashboard rendering.
+
+**Headers:**
+```
+Authorization: Bearer <JWT_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "message": "User info fetched successfully",
+  "user": {
+    "userId": "USR-550e8400-e29b-41d4-a716-446655440000",
+    "username": "john_doe",
+    "email": "john@example.com",
+    "isVerified": true,
+    "createdAt": "2026-03-02T09:03:08.978Z",
+    "updatedAt": "2026-03-02T09:03:08.978Z"
+  },
+  "questionnaire": {
+    "_id": "69a551f0ce7ab2d5ef038a60",
+    "userId": "USR-550e8400-e29b-41d4-a716-446655440000",
+    "ageGroup": "18-25",
+    "sex": "Male",
+    "skinType": "Oily"
+  },
+  "acne_analysis": {
+    "_id": "69a5524cce7ab2d5ef038a7a",
+    "userId": "USR-550e8400-e29b-41d4-a716-446655440000",
+    "areas": [
+      {
+        "area": "forehead",
+        "imageName": "cleanskin.jpeg",
+        "imageUrl": "https://res.cloudinary.com/your-cloud/image/upload/sample.jpg",
+        "prediction": "cleanskin",
+        "confidence": 100,
+        "probabilities": {
+          "cleanskin": 100,
+          "mild": 0,
+          "moderate": 0,
+          "severe": 0,
+          "unknown": 0
+        },
+        "predictionId": 1
+      }
+    ],
+    "createdAt": "2026-03-02T09:03:08.978Z",
+    "updatedAt": "2026-03-02T09:03:08.978Z"
+  }
+}
+```
+
+**Notes:**
+- `questionnaire` is `null` when the user has not submitted questionnaire yet.
+- `acne_analysis` is `null` when the user has not uploaded acne images yet.
+
+**Error Responses:**
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| 401 | "Unauthorized: Invalid user context" | Invalid/missing token |
+| 404 | "User not found" | Token valid but user record missing |
+| 500 | "Failed to fetch user info" | Server error |
+
+---
+
+### 3. Get User Status
 **Endpoint:** `GET /auth/user-status`
 
 **Authentication:** Required (JWT Token)
