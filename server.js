@@ -141,9 +141,13 @@ app.use(cookieParser());
  */
 
 // Strict limit for auth endpoints
+const isDevelopment = NODE_ENV === "development";
+const authRateLimitMax = Number(process.env.AUTH_RATE_LIMIT_MAX) || (isDevelopment ? 200 : 50);
+const generalRateLimitMax = Number(process.env.GENERAL_RATE_LIMIT_MAX) || (isDevelopment ? 2000 : 100);
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // 50 requests per windowMs
+  max: authRateLimitMax,
   message: { message: "Too many authentication attempts, please try again later" },
   standardHeaders: true,
   legacyHeaders: false,
@@ -156,9 +160,20 @@ const authLimiter = rateLimit({
 // General API limiter
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per windowMs
+  max: generalRateLimitMax,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Do not count preflight requests or lightweight auth status/profile GET checks.
+    if (req.method === "OPTIONS") return true;
+
+    if (req.method === "GET") {
+      const path = (req.path || "").replace(/\/+$/, "");
+      return path === "/auth/userinfo" || path === "/auth/user-status" || path === "/auth/users/count";
+    }
+
+    return false;
+  }
 });
 
 // Apply limiters

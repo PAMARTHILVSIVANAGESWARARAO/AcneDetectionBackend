@@ -12,16 +12,33 @@ const MIN_PASSWORD_LENGTH = 8;
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET;
-
-const transporter = nodemailer.createTransport({
+const mailConfig = {
   host: process.env.SMTP_HOST,
   port: Number(process.env.SMTP_PORT) || 587,
   secure: process.env.SMTP_SECURE === "true",
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS
-  }
-});
+  user: process.env.SMTP_USER,
+  pass: process.env.SMTP_PASS
+};
+const mailConfigured = Boolean(mailConfig.host && mailConfig.user && mailConfig.pass);
+
+if (!mailConfigured) {
+  console.warn("Mail disabled: SMTP_HOST/SMTP_USER/SMTP_PASS is missing.");
+}
+
+const transporter = mailConfigured
+  ? nodemailer.createTransport({
+      host: mailConfig.host,
+      port: mailConfig.port,
+      secure: mailConfig.secure,
+      auth: {
+        user: mailConfig.user,
+        pass: mailConfig.pass
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000
+    })
+  : null;
 
 const generateOTP = () =>
   crypto.randomInt(100000, 999999).toString();
@@ -30,10 +47,13 @@ const generateUserId = () =>
   `USR-${uuidv4()}`;
 
 const safeSendMail = async (options) => {
+  if (!transporter) return false;
   try {
     await transporter.sendMail(options);
+    return true;
   } catch (err) {
-    console.error("Mail Error:", err.message);
+    console.error("Mail Error:", err.message, err.code ? `(code: ${err.code})` : "");
+    return false;
   }
 };
 
@@ -72,7 +92,7 @@ export const register = async (req, res) => {
     const otp = generateOTP();
     const hashedOtp = await bcrypt.hash(otp, 10);
 
-    await User.create({
+    const user = await User.create({
       userId: generateUserId(),
       username,
       email,
@@ -81,7 +101,7 @@ export const register = async (req, res) => {
       otpExpiry: new Date(Date.now() + OTP_EXPIRY_TIME)
     });
 
-    await safeSendMail({
+    const mailSent = await safeSendMail({
       from: process.env.SMTP_FROM,
       to: email,
       subject: "Verify Your Account – Secure Access Code Inside 💚",
@@ -192,6 +212,11 @@ This is an automated message. Please do not reply directly to this email.
 </html>
 `
     });
+
+    if (!mailSent) {
+      await User.deleteOne({ _id: user._id });
+      return res.status(503).json({ message: "Unable to send verification OTP email. Please try again." });
+    }
 
     return res.status(200).json({ message: "OTP sent to email" });
 
@@ -366,7 +391,7 @@ export const resendOtp = async (req, res) => {
 
     await user.save();
 
-    await safeSendMail({
+    const mailSent = await safeSendMail({
       from: process.env.SMTP_FROM,
       to: email,
       subject: "Your New OTP – Verification Code Inside 💚",
@@ -472,6 +497,10 @@ This is an automated message. Please do not reply directly to this email.
 `
     });
 
+    if (!mailSent) {
+      return res.status(503).json({ message: "Unable to send OTP email right now. Please try again later." });
+    }
+
     return res.status(200).json({ message: "OTP resent" });
 
   } catch (err) {
@@ -535,7 +564,7 @@ export const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    await safeSendMail({
+    const mailSent = await safeSendMail({
       from: process.env.SMTP_FROM,
       to: email,
       subject: "Reset Your Password – Secure OTP Inside 💚",
@@ -640,6 +669,10 @@ This is an automated security message. Please do not reply to this email.
 </html>
 `
     });
+
+    if (!mailSent) {
+      return res.status(503).json({ message: "Unable to send reset OTP email right now. Please try again later." });
+    }
 
     return res.status(200).json({ message: "If account exists, OTP sent" });
 
