@@ -45,6 +45,21 @@ const app = express();
 /**
  * MIDDLEWARE SETUP
  */
+// Remove Express fingerprinting header for basic hardening.
+app.disable("x-powered-by");
+
+// Trust reverse proxy (Render/NGINX/etc.) so secure cookies and rate-limit IPs work correctly.
+const trustProxyEnv = (process.env.TRUST_PROXY || "1").trim();
+const trustProxyValue =
+  trustProxyEnv === "true"
+    ? true
+    : trustProxyEnv === "false"
+      ? false
+      : Number.isNaN(Number(trustProxyEnv))
+        ? 1
+        : Number(trustProxyEnv);
+app.set("trust proxy", trustProxyValue);
+
 
 // Body parser with size limits
 app.use(express.json({ limit: "10mb" }));
@@ -52,7 +67,15 @@ app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 // CORS configuration - Allow whitelisted origins (supports wildcards and localhost variants)
 const NODE_ENV = process.env.NODE_ENV || "development";
-const allowedOriginsEnv = process.env.ALLOWED_ORIGINS.split(",").map(origin => origin.trim());
+const allowedOriginsEnv = process.env.ALLOWED_ORIGINS
+  .split(",")
+  .map(origin => origin.trim().replace(/\/+$/, ""))
+  .filter(Boolean);
+
+if (allowedOriginsEnv.length === 0) {
+  console.error("FATAL: ALLOWED_ORIGINS must contain at least one valid origin");
+  process.exit(1);
+}
 
 console.log(`🔐 CORS Configuration:`);
 console.log(`   Environment: ${NODE_ENV}`);
@@ -231,12 +254,13 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error("Error:", err.message);
+  const errorMessage = err?.message || "Unknown error";
+  console.error("Error:", errorMessage);
   
   // CORS error
-  if (err.message.includes("Not allowed by CORS")) {
+  if (errorMessage.includes("Not allowed by CORS")) {
     return res.status(403).json({
-      message: err.message,
+      message: errorMessage,
       hint: "Check ALLOWED_ORIGINS in .env file"
     });
   }
@@ -267,6 +291,24 @@ process.on("SIGTERM", () => {
     mongoose.connection.close();
     process.exit(0);
   });
+});
+
+process.on("SIGINT", () => {
+  console.log("🛑 SIGINT received, shutting down gracefully...");
+  server.close(() => {
+    console.log("Server closed");
+    mongoose.connection.close();
+    process.exit(0);
+  });
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+  process.exit(1);
 });
 
 export default app;
