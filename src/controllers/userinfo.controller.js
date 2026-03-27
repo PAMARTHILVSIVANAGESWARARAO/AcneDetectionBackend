@@ -107,7 +107,7 @@ export const getMyUserInfo = async (req, res) => {
     }
 
     const [account, questionnaire, acneAnalysis] = await Promise.all([
-      User.findOne({ userId }).select("userId username email isVerified createdAt updatedAt"),
+      User.findOne({ userId }).select("userId username email createdAt updatedAt"),
       UserInfo.findOne({ userId }).select("-__v"),
       UserAcneLevel.findOne({ userId }).select("-__v")
     ]);
